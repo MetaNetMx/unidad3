@@ -53,7 +53,7 @@ El árbol de decisión particiona recursivamente el espacio de variables mediant
 
 ## 2. Descripción del Dataset
 
-- **Nombre:** Default of Credit Card Clients (réplica fiel del dataset UCI)
+- **Nombre:** Default of Credit Card Clients (réplica fiel del dataset UCI) https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients
 - **Fuente original:** Yeh, I. C., & Lien, C. H. (2009). UCI Machine Learning Repository
 - **Contexto:** Clientes de tarjetas de crédito en Taiwán (abril-septiembre 2005)
 - **Registros:** 30,000 clientes
