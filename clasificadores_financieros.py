@@ -37,8 +37,12 @@ from sklearn.metrics import (
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import os
 import warnings
 warnings.filterwarnings('ignore')
+
+# Directorio base: donde está este script
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ============================================================
 # 1. GENERACIÓN DE RÉPLICA DEL DATASET UCI
@@ -128,7 +132,7 @@ default = (np.random.rand(n) < prob_default).astype(int)
 df['default_payment_next_month'] = default
 
 # Guardar dataset como CSV
-csv_path = '/home/user/unidad3/dataset_credit_card_default.csv'
+csv_path = os.path.join(BASE_DIR, 'dataset_credit_card_default.csv')
 df.to_csv(csv_path, index=False)
 print(f"\nDataset guardado en: {csv_path}")
 print(f"Registros: {len(df):,}")
@@ -366,7 +370,7 @@ for bar in bars2:
             f'{bar.get_height():.3f}', ha='center', va='bottom', fontsize=8)
 
 plt.tight_layout()
-plt.savefig('/home/user/unidad3/graficas_comparacion.png', dpi=150, bbox_inches='tight')
+plt.savefig(os.path.join(BASE_DIR, 'graficas_comparacion.png'), dpi=150, bbox_inches='tight')
 print("\nGráficas guardadas en: graficas_comparacion.png")
 
 # ============================================================
