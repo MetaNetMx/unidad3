@@ -1,27 +1,17 @@
 """
 Unidad 3 - Práctica Guiada: Modelos de ML en Finanzas
 =====================================================
+Elaboró: Ernesto Ramírez
+
 Clasificadores de Regresión Logística y Árbol de Decisión
 aplicados a predicción de default de crédito.
 
-Dataset: Réplica del "Default of Credit Card Clients" (UCI Repository)
-Fuente original: Yeh, I. C., & Lien, C. H. (2009). UCI Machine Learning Repository.
-    https://archive.ics.uci.edu/ml/datasets/default+of+credit+card+clients
+Dataset: "Default of Credit Card Clients" (UCI Repository)
+Fuente: Yeh, I. C., & Lien, C. H. (2009). UCI Machine Learning Repository.
+    https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients
 
-El dataset original contiene 30,000 registros de clientes de tarjetas de
-crédito en Taiwán (abril-septiembre 2005). Se replica fielmente su estructura,
-variables y distribuciones estadísticas para fines educativos.
-
-Variables (23 predictoras + 1 objetivo):
-    X1: LIMIT_BAL   - Monto del crédito otorgado (dólares NT)
-    X2: SEX          - Género (1=masculino, 2=femenino)
-    X3: EDUCATION    - Educación (1=posgrado, 2=universidad, 3=preparatoria, 4=otros)
-    X4: MARRIAGE     - Estado civil (1=casado, 2=soltero, 3=otros)
-    X5: AGE          - Edad (años)
-    X6-X11: PAY_0..PAY_6 - Estatus de pago mes a mes (-1=pago puntual, 1-9=meses de atraso)
-    X12-X17: BILL_AMT1..BILL_AMT6 - Monto del estado de cuenta mensual
-    X18-X23: PAY_AMT1..PAY_AMT6   - Monto del pago mensual
-    Y: default.payment.next.month  - Default (1=sí, 0=no)
+30,000 registros de clientes de tarjetas de crédito en Taiwán (2005).
+23 variables predictoras + 1 variable objetivo (default_payment_next_month).
 """
 
 import numpy as np
@@ -45,96 +35,18 @@ warnings.filterwarnings('ignore')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ============================================================
-# 1. GENERACIÓN DE RÉPLICA DEL DATASET UCI
-#    "Default of Credit Card Clients"
-#    Distribuciones basadas en las estadísticas publicadas
-#    del dataset original (30,000 registros)
+# 1. CARGA DEL DATASET
+#    "Default of Credit Card Clients" - UCI Repository
+#    Archivo CSV debe estar en el mismo directorio que este script
 # ============================================================
 print("=" * 70)
-print("GENERANDO RÉPLICA DEL DATASET UCI:")
+print("CARGANDO DATASET UCI:")
 print("'Default of Credit Card Clients' (Taiwán, 2005)")
 print("=" * 70)
 
-np.random.seed(42)
-n = 30000
-
-# X1: LIMIT_BAL - Límite de crédito (media ~167,484 NT$, mediana 140,000)
-limit_bal = np.random.lognormal(mean=11.7, sigma=0.8, size=n).clip(10000, 800000)
-limit_bal = (np.round(limit_bal / 10000) * 10000).astype(int)
-
-# X2: SEX (1=masculino ~39.3%, 2=femenino ~60.7%)
-sex = np.random.choice([1, 2], size=n, p=[0.393, 0.607])
-
-# X3: EDUCATION (1=posgrado ~10.6%, 2=universidad ~46.8%, 3=preparatoria ~16.4%, 4=otros ~26.2%)
-education = np.random.choice([1, 2, 3, 4], size=n, p=[0.106, 0.468, 0.164, 0.262])
-
-# X4: MARRIAGE (1=casado ~45.3%, 2=soltero ~53.2%, 3=otros ~1.5%)
-marriage = np.random.choice([1, 2, 3], size=n, p=[0.453, 0.532, 0.015])
-
-# X5: AGE (media ~35.5, std ~9.2)
-age = np.random.normal(35.5, 9.2, n).clip(21, 79).astype(int)
-
-# X6-X11: PAY_0 a PAY_6 - Estatus de pago (-1=puntual, 0=revolvente, 1-8=meses atraso)
-# Distribución: ~50% puntual, ~27% revolvente, ~15% 1 mes, ~5% 2 meses, ~3% 3+ meses
-pay_values = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8]
-pay_probs = [0.50, 0.27, 0.10, 0.05, 0.03, 0.02, 0.01, 0.008, 0.007, 0.005]
-pay_cols = {}
-for i, col in enumerate(['PAY_0', 'PAY_2', 'PAY_3', 'PAY_4', 'PAY_5', 'PAY_6']):
-    # Meses más recientes tienen más variación
-    pay_cols[col] = np.random.choice(pay_values, size=n, p=pay_probs)
-
-# X12-X17: BILL_AMT1 a BILL_AMT6 - Estado de cuenta (correlacionado con LIMIT_BAL)
-bill_cols = {}
-for i, col in enumerate(['BILL_AMT1', 'BILL_AMT2', 'BILL_AMT3',
-                          'BILL_AMT4', 'BILL_AMT5', 'BILL_AMT6']):
-    usage_ratio = np.random.beta(2, 3, n)
-    noise = np.random.normal(0, 5000, n)
-    bill_cols[col] = (limit_bal * usage_ratio + noise).clip(-50000, None).astype(int)
-
-# X18-X23: PAY_AMT1 a PAY_AMT6 - Montos de pago
-pay_amt_cols = {}
-for i, col in enumerate(['PAY_AMT1', 'PAY_AMT2', 'PAY_AMT3',
-                          'PAY_AMT4', 'PAY_AMT5', 'PAY_AMT6']):
-    bill_key = f'BILL_AMT{i+1}'
-    pay_ratio = np.random.beta(1.5, 5, n)
-    pay_amt_cols[col] = (np.abs(bill_cols[bill_key]) * pay_ratio +
-                         np.random.exponential(500, n)).clip(0).astype(int)
-
-# Construir DataFrame
-df = pd.DataFrame({
-    'LIMIT_BAL': limit_bal,
-    'SEX': sex,
-    'EDUCATION': education,
-    'MARRIAGE': marriage,
-    'AGE': age,
-    **pay_cols,
-    **bill_cols,
-    **pay_amt_cols
-})
-
-# Variable objetivo: default (tasa real ~22.1%)
-# Modelo generativo basado en factores de riesgo reales
-logit = (
-    -1.5
-    - 0.000004 * (limit_bal - 170000)      # Mayor límite → menor riesgo
-    + 0.3 * (pay_cols['PAY_0'] > 0)         # Atraso reciente → mayor riesgo
-    + 0.5 * (pay_cols['PAY_0'] >= 2)        # Atraso severo → mucho mayor riesgo
-    + 0.2 * (pay_cols['PAY_2'] > 0)
-    + 0.15 * (pay_cols['PAY_3'] > 0)
-    - 0.01 * (age - 35)                     # Mayor edad → ligeramente menor riesgo
-    + 0.3 * (education == 3)                # Menor educación → mayor riesgo
-    + 0.000002 * bill_cols['BILL_AMT1']     # Mayor deuda → mayor riesgo
-    - 0.000005 * pay_amt_cols['PAY_AMT1']   # Mayor pago → menor riesgo
-    + np.random.normal(0, 0.8, n)
-)
-prob_default = 1 / (1 + np.exp(-logit))
-default = (np.random.rand(n) < prob_default).astype(int)
-df['default_payment_next_month'] = default
-
-# Guardar dataset como CSV
 csv_path = os.path.join(BASE_DIR, 'dataset_credit_card_default.csv')
-df.to_csv(csv_path, index=False)
-print(f"\nDataset guardado en: {csv_path}")
+df = pd.read_csv(csv_path)
+print(f"\nDataset cargado desde: {csv_path}")
 print(f"Registros: {len(df):,}")
 print(f"Variables: {len(df.columns)}")
 
@@ -156,9 +68,9 @@ print(f"  No default (0): {vc[0]:,} ({vc[0]/len(df):.1%})")
 print(f"  Default    (1): {vc[1]:,} ({vc[1]/len(df):.1%})")
 
 print(f"\nDistribución demográfica:")
-print(f"  Género: Masculino {(sex==1).mean():.1%} | Femenino {(sex==2).mean():.1%}")
-print(f"  Edad promedio: {age.mean():.1f} años")
-print(f"  Límite de crédito promedio: NT${limit_bal.mean():,.0f}")
+print(f"  Género: Masculino {(df['SEX']==1).mean():.1%} | Femenino {(df['SEX']==2).mean():.1%}")
+print(f"  Edad promedio: {df['AGE'].mean():.1f} años")
+print(f"  Límite de crédito promedio: NT${df['LIMIT_BAL'].mean():,.0f}")
 
 print(f"\nEstadísticas de variables clave:")
 print(df[['LIMIT_BAL', 'AGE', 'BILL_AMT1', 'PAY_AMT1']].describe().round(0).to_string())
@@ -381,12 +293,13 @@ print("ANÁLISIS DE COSTOS DE ERROR EN CONTEXTO FINANCIERO")
 print("=" * 70)
 
 # Convertir NT$ a USD aproximado (1 USD ≈ 30 NT$ en 2005)
-limite_promedio_usd = limit_bal.mean() / 30
-print(f"\nLímite de crédito promedio: NT${limit_bal.mean():,.0f} (~US${limite_promedio_usd:,.0f})")
+limite_promedio = df['LIMIT_BAL'].mean()
+limite_promedio_usd = limite_promedio / 30
+print(f"\nLímite de crédito promedio: NT${limite_promedio:,.0f} (~US${limite_promedio_usd:,.0f})")
 
 # Costos en NT$
-costo_fn = limit_bal.mean() * 0.60   # 60% del límite se pierde en default
-costo_fp = limit_bal.mean() * 0.03   # 3% de costo de oportunidad
+costo_fn = limite_promedio * 0.60   # 60% del límite se pierde en default
+costo_fp = limite_promedio * 0.03   # 3% de costo de oportunidad
 
 print(f"\nSupuestos de costos:")
 print(f"  Costo por Falso Negativo (aprobar default): NT${costo_fn:,.0f}")
